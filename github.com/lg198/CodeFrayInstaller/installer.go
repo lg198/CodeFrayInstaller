@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"fmt"
 	"io"
+    "time"
 )
 
 var SrcFolder string
@@ -17,6 +18,41 @@ func main() {
 		SrcFolder, _ = filepath.Abs(filepath.Dir(os.Args[0]))
 	}
 
+    exPath, _ := filepath.Abs(os.Args[0])
+    exName := filepath.Base(exPath)
+
+    fmt.Println("> Scanning src folder...")
+    srcFile, err := os.Open(SrcFolder)
+    if err != nil {
+        if srcFile != nil {
+            srcFile.Close()
+        }
+        fmt.Println(">!> Warning! Unable to open the src folder for scanning! If you are trying to update the API, delete your src folder, re-create it, and start over.")
+        fmt.Println(">!> If you are installing in a clean src folder, this should not affect your installation.")
+        time.Sleep(2 * time.Second)
+        return
+    }
+    names, err := srcFile.Readdirnames(-1)
+    if err != nil && err != io.EOF {
+        fmt.Println(">!> Warning! Unable to scan src folder! If you are trying to update the API, delete your src folder, re-create it, and start over.")
+        fmt.Println(">!> If you are installing in a clean src folder, this should not affect your installation.")
+        time.Sleep(2 * time.Second)
+        return
+    }
+    nc := 0
+    for _, name := range names {
+        if name != exName {
+            nc++
+        }
+    }
+    srcFile.Close()
+
+    if nc > 0 {
+        fmt.Println("> Unclean folder detected! Attempting to update and not install...")
+        Update()
+        return
+    }
+
 	if err := SetupRepo(); err != nil {
 		return
 	}
@@ -24,7 +60,7 @@ func main() {
 		return
 	}
 
-	fmt.Println("The CodeFrayAPI was installed successfully!")
+	fmt.Println("> The CodeFrayAPI was installed successfully!")
 }
 
 /* The git commands:
@@ -34,12 +70,12 @@ func main() {
 */
 
 func setupError(err error, command string) {
-	fmt.Println("There was an error in installation: " + command + ". Please delete the src folder and recreate it.")
-	fmt.Println(err)
+	fmt.Println(" >!> There was an error in installation: " + command + ". Please delete the src folder and recreate it.")
+	fmt.Println("\t" + err.Error())
 }
 
 func SetupRepo() error {
-	fmt.Println("Setting up repository...")
+	fmt.Println("> Setting up repository...")
 	initCommand := exec.Command("git", "init")
 	initCommand.Dir = SrcFolder
 	if err := initCommand.Run(); err != nil {
@@ -63,7 +99,7 @@ func SetupRepo() error {
 }
 
 func StructureFolder() error {
-	fmt.Println("Restructuring directory...")
+	fmt.Println("> Restructuring directory...")
 
 	os.Remove(filepath.Join(SrcFolder, "LICENSE"))
 	os.Remove(filepath.Join(SrcFolder, "README.md"))
@@ -78,6 +114,23 @@ func StructureFolder() error {
 		return err
 	}
 	return nil
+}
+
+/*
+    Update command: git pull origin master
+*/
+
+func Update() {
+    fmt.Println("> Pulling changes...")
+    remoteCommand := exec.Command("git", "pull", "origin", "master")
+    remoteCommand.Dir = SrcFolder
+    if res, err := remoteCommand.CombinedOutput(); err != nil {
+        fmt.Println(string(res))
+        setupError(err, "git pull")
+        return
+    }
+
+    fmt.Println("> The CodeFrayAPI was updated successfully!")
 }
 
 func CopyFile(source string, dest string) error {
